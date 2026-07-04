@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Zap, Settings, ChevronLeft, LayoutGrid } from 'lucide-react';
+import { Zap, Settings, ChevronLeft, LayoutGrid, ArrowLeftRight } from 'lucide-react';
 import { useMissionControl } from '@/lib/store';
 import { format } from 'date-fns';
 import type { Workspace } from '@/lib/types';
@@ -119,6 +119,13 @@ export function Header({ workspace }: HeaderProps) {
           />
           {isOnline ? 'ONLINE' : 'OFFLINE'}
         </div>
+        <button
+          onClick={() => router.push('/arbitrage')}
+          className="p-2 hover:bg-mc-bg-tertiary rounded text-mc-text-secondary"
+          title="Arbitrage Scanner"
+        >
+          <ArrowLeftRight className="w-5 h-5" />
+        </button>
         <button
           onClick={() => router.push('/settings')}
           className="p-2 hover:bg-mc-bg-tertiary rounded text-mc-text-secondary"
