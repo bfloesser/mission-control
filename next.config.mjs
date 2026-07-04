@@ -1,11 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['better-sqlite3'],
+    serverComponentsExternalPackages: ['better-sqlite3', 'ccxt'],
   },
   webpack: (config) => {
     config.externals.push({
       'better-sqlite3': 'commonjs better-sqlite3',
+      ccxt: 'commonjs ccxt',
     });
     return config;
   },

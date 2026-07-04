@@ -79,3 +79,76 @@ Offline unit tests for the scanner logic (no network needed):
 ```
 npx tsx scripts/test-arbitrage.ts
 ```
+
+---
+
+# Trade Execution (One-Click Arbitrage)
+
+Beyond scanning, the dashboard can **execute** an arbitrage trade end to end:
+market-buy on the cheap exchange → withdraw to the expensive exchange →
+wait for the deposit → market-sell. Progress, fees and realized profit are
+tracked live in the UI.
+
+## Setup
+
+1. Open `/arbitrage/keys` (or the "API-Keys" button on the scanner page).
+2. Store an API key per exchange. Keys need **trade + withdraw** permissions.
+   OKX, KuCoin and Bitget additionally require the API passphrase.
+3. Use the "Testen" button — it fetches your balance to verify the key works.
+
+**Key security**
+
+- Keys are encrypted at rest (AES-256-GCM). The encryption key comes from the
+  `ARB_ENCRYPTION_KEY` env var (64 hex chars) or is auto-generated into
+  `.arb-secret` (gitignored, chmod 600).
+- Withdrawal permission is dangerous. Restrict the API key to this server's
+  IP, enable address-whitelisting where the exchange supports it, and set
+  `MC_API_TOKEN` so the dashboard API itself requires auth.
+
+## Executing a trade
+
+Each scanner row has a **Trade** button. It opens a modal where you:
+
+1. Choose the spend amount (in the buy-side quote currency).
+2. Get a **live preview**: current ask/bid, the transfer network that is
+   actually open on both sides (cheapest withdrawal fee wins), all three fee
+   components (buy taker, network/withdrawal, sell taker) and the expected
+   profit in currency and %.
+3. Confirm the risk checkbox and execute.
+
+The trade then runs as a persisted state machine
+(`buy → withdraw → wait_deposit → sell → done`), advanced by API polling and
+a background loop (deposit detection via balance delta, 4h timeout → `stuck`).
+Every step is logged; the trades panel shows bought/sent/arrived/sold amounts,
+all fees actually paid, and the realized profit once the sell fills.
+
+If a step fails mid-way (e.g. withdrawal rejected), the trade is marked
+`failed` with a log entry stating **where your coins are** so you can finish
+manually. A process crash during the buy step marks the trade `stuck` instead
+of blindly retrying the market order.
+
+## API
+
+```
+GET    /api/arbitrage/keys              # configured exchanges (masked)
+POST   /api/arbitrage/keys              # { exchange, apiKey, secret, password? }
+DELETE /api/arbitrage/keys?exchange=…
+POST   /api/arbitrage/keys/test         # { exchange } → balance check
+POST   /api/arbitrage/preview           # { base, buyExchange, sellExchange, buyQuote, sellQuote, spendAmount }
+GET    /api/arbitrage/trades            # list + advance running trades
+POST   /api/arbitrage/trades            # execute (re-previews at fresh prices first)
+GET    /api/arbitrage/trades/[id]
+```
+
+## Execution risks — read this
+
+- **Price risk during transfer**: the spread can vanish (or invert) while the
+  coin is on-chain. Fast/cheap networks (e.g. TRC20, SOL) reduce this window.
+- **First withdrawal to a new address** often triggers extra confirmation
+  steps (email/2FA) or 24h holds on some exchanges — the trade will sit in
+  `wait_deposit` until you approve it or it times out as `stuck`.
+- **Market orders** pay the spread and slippage on both legs.
+- Start with a **small test amount** to verify the whole path end to end.
+
+Tests: `npx tsx scripts/test-arbitrage-execution.ts` (network selection, fee
+math, encryption roundtrip — offline).

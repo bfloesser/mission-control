@@ -66,6 +66,93 @@ export interface ScanResult {
   opportunities: ArbitrageOpportunity[];
 }
 
+// ---------------------------------------------------------------------------
+// Trade execution
+// ---------------------------------------------------------------------------
+
+export type TradeStep = 'created' | 'buy' | 'withdraw' | 'wait_deposit' | 'sell' | 'done';
+
+export type TradeStatus = 'running' | 'done' | 'failed' | 'stuck';
+
+export interface TradeLogEntry {
+  at: string;
+  message: string;
+}
+
+/** Fee actually paid at one point of the trade, in a given currency. */
+export interface PaidFee {
+  label: string;
+  amount: number;
+  currency: string;
+}
+
+export interface TradePreview {
+  base: string;
+  buyExchange: ExchangeId;
+  sellExchange: ExchangeId;
+  buyQuote: string;
+  sellQuote: string;
+  /** Amount to spend, in buy-side quote currency */
+  spendAmount: number;
+  buyPrice: number;
+  sellPrice: number;
+  /** Withdrawal network chosen (common to both exchanges) */
+  network: string;
+  /** Withdrawal fee in base units */
+  withdrawFee: number;
+  estBaseQty: number;
+  estArriveQty: number;
+  estProceeds: number;
+  estProfit: number;
+  estProfitPct: number;
+  fees: PaidFee[];
+  warnings: string[];
+}
+
+export interface ArbTradeData {
+  preview: TradePreview;
+  log: TradeLogEntry[];
+  error?: string;
+  // Filled in as the trade progresses:
+  buyOrderId?: string;
+  /** Base quantity actually bought (after buy fee) */
+  boughtQty?: number;
+  /** Quote actually spent */
+  spentQuote?: number;
+  buyAvgPrice?: number;
+  withdrawalId?: string;
+  /** Base quantity sent (before network fee) */
+  withdrawnQty?: number;
+  depositTxId?: string;
+  /** Base quantity that arrived on the sell exchange */
+  arrivedQty?: number;
+  sellOrderId?: string;
+  sellAvgPrice?: number;
+  /** Quote received from the sell (after sell fee) */
+  proceedsQuote?: number;
+  /** Sell-exchange base balance before the transfer (deposit detection baseline) */
+  sellBaselineQty?: number;
+  /** When the deposit wait started (for timeout) */
+  waitStartedAt?: string;
+  /** Realized result */
+  profitQuote?: number;
+  profitPct?: number;
+  feesPaid: PaidFee[];
+}
+
+export interface ArbTrade {
+  id: string;
+  status: TradeStatus;
+  step: TradeStep;
+  base: string;
+  buyExchange: ExchangeId;
+  sellExchange: ExchangeId;
+  spendAmount: number;
+  data: ArbTradeData;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ScanOptions {
   exchanges?: ExchangeId[];
   quoteBucket?: QuoteBucket;

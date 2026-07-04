@@ -181,6 +181,40 @@ const migrations: Migration[] = [
         console.log('[Migration 006] Added planning_dispatch_error to tasks');
       }
     }
+  },
+  {
+    id: '007',
+    name: 'add_arbitrage_tables',
+    up: (db) => {
+      console.log('[Migration 007] Adding arbitrage credentials and trades tables...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS exchange_credentials (
+          exchange TEXT PRIMARY KEY,
+          api_key TEXT NOT NULL,
+          secret TEXT NOT NULL,
+          password TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS arb_trades (
+          id TEXT PRIMARY KEY,
+          status TEXT NOT NULL,
+          step TEXT NOT NULL,
+          base TEXT NOT NULL,
+          buy_exchange TEXT NOT NULL,
+          sell_exchange TEXT NOT NULL,
+          spend_amount REAL NOT NULL,
+          data TEXT NOT NULL,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_arb_trades_status ON arb_trades(status, created_at DESC)`);
+    }
   }
 ];
 

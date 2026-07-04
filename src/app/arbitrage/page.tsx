@@ -7,10 +7,14 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  KeyRound,
+  Play,
   RefreshCw,
   TrendingUp,
 } from 'lucide-react';
 import { EXCHANGE_LABELS } from '@/lib/arbitrage/exchanges';
+import { TradeModal } from '@/components/arbitrage/TradeModal';
+import { TradesPanel } from '@/components/arbitrage/TradesPanel';
 import type {
   ArbitrageOpportunity,
   ExchangeId,
@@ -58,6 +62,8 @@ export default function ArbitragePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [tradeOpp, setTradeOpp] = useState<ArbitrageOpportunity | null>(null);
+  const [tradesRefresh, setTradesRefresh] = useState(0);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -135,6 +141,13 @@ export default function ArbitragePage() {
               {new Date(result.scannedAt).toLocaleTimeString()}
             </span>
           )}
+          <Link
+            href="/arbitrage/keys"
+            className="flex items-center gap-2 px-3 py-1.5 bg-mc-bg-tertiary border border-mc-border rounded text-sm hover:bg-mc-bg transition-colors"
+          >
+            <KeyRound className="w-4 h-4" />
+            API-Keys
+          </Link>
           <label className="flex items-center gap-2 text-xs text-mc-text-secondary cursor-pointer">
             <input
               type="checkbox"
@@ -234,6 +247,9 @@ export default function ArbitragePage() {
           </div>
         )}
 
+        {/* Active & past trades */}
+        <TradesPanel refreshToken={tradesRefresh} />
+
         {/* Results */}
         <div className="bg-mc-bg-secondary border border-mc-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
@@ -246,6 +262,7 @@ export default function ArbitragePage() {
                   <th className="text-right px-4 py-3">Brutto</th>
                   <th className="text-right px-4 py-3">Netto*</th>
                   <th className="text-right px-4 py-3">Min. Vol 24h</th>
+                  <th className="w-20" />
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -259,19 +276,20 @@ export default function ArbitragePage() {
                       opp={opp}
                       isOpen={isOpen}
                       onToggle={() => setExpanded(isOpen ? null : key)}
+                      onTrade={() => setTradeOpp(opp)}
                     />
                   );
                 })}
                 {result && result.opportunities.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-mc-text-secondary">
+                    <td colSpan={8} className="px-4 py-8 text-center text-mc-text-secondary">
                       Keine Gelegenheiten über {minSpread}% Netto-Spread gefunden.
                     </td>
                   </tr>
                 )}
                 {!result && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-mc-text-secondary">
+                    <td colSpan={8} className="px-4 py-8 text-center text-mc-text-secondary">
                       {loading ? 'Scanne Börsen…' : 'Noch kein Scan.'}
                     </td>
                   </tr>
@@ -289,6 +307,14 @@ export default function ArbitragePage() {
           sind die häufigste Ursache für scheinbar hohe Spreads). Keine Anlageberatung.
         </p>
       </main>
+
+      {tradeOpp && (
+        <TradeModal
+          opportunity={tradeOpp}
+          onClose={() => setTradeOpp(null)}
+          onStarted={() => setTradesRefresh((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }
@@ -297,10 +323,12 @@ function OpportunityRow({
   opp,
   isOpen,
   onToggle,
+  onTrade,
 }: {
   opp: ArbitrageOpportunity;
   isOpen: boolean;
   onToggle: () => void;
+  onTrade: () => void;
 }) {
   const minVol = Math.min(opp.buy.quoteVolume24h, opp.sell.quoteVolume24h);
   return (
@@ -333,13 +361,26 @@ function OpportunityRow({
         <td className="px-4 py-3 text-right text-mc-text-secondary font-mono">
           {formatVolume(minVol)}
         </td>
+        <td className="px-2 text-right">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onTrade();
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-mc-accent-green/20 border border-mc-accent-green text-mc-accent-green rounded hover:bg-mc-accent-green/30 transition-colors"
+            title="Arbitrage-Trade ausführen"
+          >
+            <Play className="w-3 h-3" />
+            Trade
+          </button>
+        </td>
         <td className="px-2 text-mc-text-secondary">
           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </td>
       </tr>
       {isOpen && (
         <tr className="border-b border-mc-border/50 bg-mc-bg">
-          <td colSpan={7} className="px-4 py-3">
+          <td colSpan={8} className="px-4 py-3">
             <div className="text-xs text-mc-text-secondary uppercase mb-2">
               Alle Kurse ({opp.exchangeCount} Börsen, sortiert nach Ask)
             </div>
