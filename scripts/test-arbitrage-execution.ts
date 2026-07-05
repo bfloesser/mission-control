@@ -10,6 +10,8 @@ import {
   quoteSpent,
 } from '../src/lib/arbitrage/execution-helpers';
 import { encrypt, decrypt } from '../src/lib/arbitrage/crypto';
+import { buildPriceMap, valueAssets } from '../src/lib/arbitrage/balances';
+import type { NormalizedTicker } from '../src/lib/arbitrage/types';
 
 let failures = 0;
 function assert(condition: boolean, message: string) {
@@ -108,6 +110,38 @@ console.log('credential encryption roundtrip');
   assert(encrypted !== secret && encrypted.split('.').length === 3, 'ciphertext format iv.data.tag');
   assert(decrypt(encrypted) === secret, 'decrypt(encrypt(x)) === x');
   assert(encrypt(secret) !== encrypted, 'random IV → different ciphertext each time');
+}
+
+console.log('balance valuation');
+{
+  const t = (base: string, quote: string, mid: number): NormalizedTicker => ({
+    exchange: 'binance',
+    base,
+    quote,
+    bid: mid,
+    ask: mid,
+    quoteVolume24h: 0,
+  });
+  const prices = buildPriceMap([
+    t('BTC', 'USDT', 100_000),
+    t('ETH', 'USDT', 5_000),
+    t('RARE', 'BTC', 0.0001), // only priced in BTC → chained via BTC/USDT
+  ]);
+  assert(prices.get('USDT') === 1, 'stables count as $1');
+  assert(prices.get('BTC') === 100_000, 'direct USD price used');
+  assert(prices.get('RARE') === 10, 'BTC-quoted asset chained to USD');
+
+  const { totalUsd, assets } = valueAssets(
+    { BTC: 0.5, USDT: 1_000, RARE: 100, UNKNOWN: 5, DUST: 0 },
+    prices
+  );
+  assert(totalUsd === 52_000, 'total = 50k BTC + 1k USDT + 1k RARE');
+  assert(assets[0].currency === 'BTC', 'sorted by USD value descending');
+  assert(
+    assets.find((a) => a.currency === 'UNKNOWN')?.usdValue === null,
+    'unpriced asset listed with null value'
+  );
+  assert(!assets.some((a) => a.currency === 'DUST'), 'zero balances dropped');
 }
 
 if (failures > 0) {

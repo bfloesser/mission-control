@@ -56,6 +56,13 @@ async function getTickers(
   }
 }
 
+/** Public tickers for one exchange, served from the shared 15s cache. */
+export async function getCachedTickers(exchange: ExchangeId): Promise<NormalizedTicker[]> {
+  const result = await getTickers(exchange);
+  if ('error' in result) throw new Error(result.error);
+  return result.tickers;
+}
+
 // ---------------------------------------------------------------------------
 // Opportunity computation (pure, unit-testable)
 // ---------------------------------------------------------------------------

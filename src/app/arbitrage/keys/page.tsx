@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ChevronLeft, KeyRound, Loader2, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, KeyRound, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import { EXCHANGE_LABELS } from '@/lib/arbitrage/exchanges';
 import type { ExchangeId } from '@/lib/arbitrage/types';
 
@@ -20,6 +20,17 @@ interface TestResult {
   balances?: Array<{ currency: string; amount: number }>;
 }
 
+interface ExchangeBalance {
+  exchange: string;
+  totalUsd: number | null;
+  assets: Array<{ currency: string; amount: number; usdValue: number | null }>;
+  error?: string;
+}
+
+function fmtUsd(n: number): string {
+  return n.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+}
+
 export default function ArbitrageKeysPage() {
   const [stored, setStored] = useState<StoredCred[]>([]);
   const [needsPassword, setNeedsPassword] = useState<string[]>([]);
@@ -31,6 +42,24 @@ export default function ArbitrageKeysPage() {
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
+  const [balances, setBalances] = useState<Record<string, ExchangeBalance>>({});
+  const [balancesLoading, setBalancesLoading] = useState(false);
+
+  const loadBalances = useCallback(async () => {
+    setBalancesLoading(true);
+    try {
+      const res = await fetch('/api/arbitrage/balances');
+      if (!res.ok) return;
+      const data = await res.json();
+      const byExchange: Record<string, ExchangeBalance> = {};
+      for (const b of data.balances as ExchangeBalance[]) byExchange[b.exchange] = b;
+      setBalances(byExchange);
+    } catch {
+      // keep last state
+    } finally {
+      setBalancesLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -46,7 +75,8 @@ export default function ArbitrageKeysPage() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadBalances();
+  }, [load, loadBalances]);
 
   const startEdit = (ex: ExchangeId) => {
     setEditing(ex);
@@ -75,6 +105,7 @@ export default function ArbitrageKeysPage() {
       if (!res.ok) throw new Error(data.error || 'Speichern fehlgeschlagen');
       setEditing(null);
       await load();
+      loadBalances();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Speichern fehlgeschlagen');
     } finally {
@@ -86,6 +117,11 @@ export default function ArbitrageKeysPage() {
     if (!confirm(`API-Keys für ${EXCHANGE_LABELS[ex as ExchangeId]} wirklich löschen?`)) return;
     await fetch(`/api/arbitrage/keys?exchange=${ex}`, { method: 'DELETE' });
     setTestResults((prev) => ({ ...prev, [ex]: undefined as unknown as TestResult }));
+    setBalances((prev) => {
+      const next = { ...prev };
+      delete next[ex];
+      return next;
+    });
     await load();
   };
 
@@ -137,18 +173,76 @@ export default function ArbitrageKeysPage() {
         </div>
 
         <div className="bg-mc-bg-secondary border border-mc-border rounded-lg divide-y divide-mc-border">
+          <div className="flex items-center justify-between px-4 py-2">
+            <span className="text-xs text-mc-text-secondary uppercase">
+              Börsen & Guthaben (in USD)
+            </span>
+            <button
+              onClick={loadBalances}
+              disabled={balancesLoading}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs text-mc-text-secondary hover:text-mc-text bg-mc-bg-tertiary border border-mc-border rounded transition-colors disabled:opacity-50"
+              title="Guthaben neu laden"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${balancesLoading ? 'animate-spin' : ''}`} />
+              Guthaben aktualisieren
+            </button>
+          </div>
           {ALL_EXCHANGES.map((ex) => {
             const cred = storedByExchange.get(ex);
             const result = testResults[ex];
+            const bal = balances[ex];
             return (
               <div key={ex} className="p-4">
                 <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="font-medium text-mc-text">{EXCHANGE_LABELS[ex]}</div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="font-medium text-mc-text">{EXCHANGE_LABELS[ex]}</span>
+                      {cred &&
+                        (bal ? (
+                          bal.error ? (
+                            <span
+                              className="text-xs px-2 py-0.5 rounded bg-mc-accent-red/10 border border-mc-accent-red text-mc-accent-red"
+                              title={bal.error}
+                            >
+                              Guthaben-Abruf fehlgeschlagen
+                            </span>
+                          ) : (
+                            <span
+                              className="text-xs px-2 py-0.5 rounded bg-mc-accent-green/10 border border-mc-accent-green/50 text-mc-accent-green font-mono"
+                              title={bal.assets
+                                .slice(0, 10)
+                                .map(
+                                  (a) =>
+                                    `${a.amount} ${a.currency}` +
+                                    (a.usdValue !== null ? ` (≈ $${fmtUsd(a.usdValue)})` : ' (kein Kurs)')
+                                )
+                                .join('\n')}
+                            >
+                              ≈ ${fmtUsd(bal.totalUsd ?? 0)}
+                            </span>
+                          )
+                        ) : balancesLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-mc-text-secondary" />
+                        ) : null)}
+                    </div>
                     <div className="text-xs text-mc-text-secondary font-mono">
                       {cred ? `Key ${cred.apiKeyMasked}` : 'Keine Keys hinterlegt'}
                       {needsPassword.includes(ex) && ' · benötigt Passphrase'}
                     </div>
+                    {cred && bal && !bal.error && bal.assets.length > 0 && (
+                      <div className="text-xs text-mc-text-secondary mt-0.5 truncate">
+                        {bal.assets
+                          .slice(0, 4)
+                          .map(
+                            (a) =>
+                              `${a.currency} ${
+                                a.usdValue !== null ? `$${fmtUsd(a.usdValue)}` : `${a.amount}`
+                              }`
+                          )
+                          .join(' · ')}
+                        {bal.assets.length > 4 && ` · +${bal.assets.length - 4} weitere`}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {cred && (
