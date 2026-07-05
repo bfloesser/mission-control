@@ -4,12 +4,17 @@
 //   1. ARB_ENCRYPTION_KEY env var (64 hex chars = 32 bytes)
 //   2. Auto-generated key persisted to .arb-secret next to the database
 //      (gitignored, chmod 600) so a stolen DB file alone is useless.
+//      Lives in the DATABASE_PATH directory when set (Docker volume),
+//      otherwise in the project directory.
 
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-const KEY_FILE = path.join(process.cwd(), '.arb-secret');
+const dataDir = process.env.DATABASE_PATH
+  ? path.dirname(process.env.DATABASE_PATH)
+  : process.cwd();
+const KEY_FILE = process.env.ARB_KEY_FILE || path.join(dataDir, '.arb-secret');
 
 let cachedKey: Buffer | null = null;
 
