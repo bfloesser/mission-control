@@ -26,6 +26,19 @@ docker compose up -d --build
 That's it — Compose rebuilds the image from the current checkout and swaps
 the container; the `./data` volume (DB, API keys) is untouched.
 
+## Synology: update in one command (no git needed)
+
+Git is usually missing on Synology and `sudo` may not find `docker` on its
+PATH, so use the branch tarball and full binary paths. From any machine with
+SSH access (PowerShell: keep the single quotes):
+
+```powershell
+ssh USER@NAS-IP 'cd /volume1/docker 2>/dev/null || cd ~; mkdir -p mission-control && cd mission-control && (wget -qO mc.tar.gz https://github.com/bfloesser/mission-control/archive/refs/heads/claude/multi-exchange-arbitrage-RtvFj.tar.gz || curl -sL -o mc.tar.gz https://github.com/bfloesser/mission-control/archive/refs/heads/claude/multi-exchange-arbitrage-RtvFj.tar.gz) && tar --strip-components=1 -xzf mc.tar.gz && rm mc.tar.gz && mkdir -p data && (sudo /usr/local/bin/docker compose up -d --build 2>/dev/null || sudo /usr/local/bin/docker-compose up -d --build)'
+```
+
+Re-running this downloads the latest branch state, rebuilds the image and
+swaps the container; the `data/` directory (DB + API keys) is preserved.
+
 ## Synology notes
 
 - Run commands via SSH with `sudo` (`sudo docker compose up -d --build`).
