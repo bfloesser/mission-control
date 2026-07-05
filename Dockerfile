@@ -25,8 +25,9 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.mjs ./
 
-RUN mkdir -p /data && chown -R node:node /data /app
-USER node
+# Runs as root: /data is typically a host bind mount (NAS setups) that a
+# non-root container user could not write to without manual chown on the host.
+RUN mkdir -p /data
 VOLUME /data
 EXPOSE 4000
 
