@@ -15,6 +15,7 @@ import {
 import { EXCHANGE_LABELS } from '@/lib/arbitrage/exchanges';
 import { TradeModal } from '@/components/arbitrage/TradeModal';
 import { TradesPanel } from '@/components/arbitrage/TradesPanel';
+import { SourceHealthPanel } from '@/components/arbitrage/SourceHealthPanel';
 import type {
   ArbitrageOpportunity,
   ExchangeId,
@@ -246,6 +247,9 @@ export default function ArbitragePage() {
             sind unvollständig.
           </div>
         )}
+
+        {/* Live-Status aller Börsen-Feeds (OSIRIS-Stil Source-Board) */}
+        <SourceHealthPanel />
 
         {/* Active & past trades */}
         <TradesPanel refreshToken={tradesRefresh} />

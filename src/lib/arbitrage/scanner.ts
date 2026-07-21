@@ -2,6 +2,7 @@
 // exchanges, group comparable markets, and rank buy-low/sell-high spreads.
 
 import { ADAPTERS, ALL_EXCHANGES, TAKER_FEES } from './exchanges';
+import { recordCacheHit, recordFailure, recordSuccess } from './sources';
 import type {
   ArbitrageOpportunity,
   ExchangeId,
@@ -41,18 +42,26 @@ async function getTickers(
 ): Promise<{ tickers: NormalizedTicker[] } | { error: string }> {
   const cached = cache.get(exchange);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    // Cache-Treffer: kein Netzwerkaufruf, Health-Zustand bleibt vom letzten
+    // echten Fetch erhalten — nur Prüfzeitpunkt aktualisieren.
+    recordCacheHit(exchange);
     return { tickers: cached.tickers };
   }
+  const startedAt = Date.now();
   try {
     const tickers = await ADAPTERS[exchange]();
     cache.set(exchange, { fetchedAt: Date.now(), tickers });
+    recordSuccess(exchange, Date.now() - startedAt, tickers.length);
     return { tickers };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     // Serve stale data (up to 2 min) rather than dropping the exchange
     if (cached && Date.now() - cached.fetchedAt < 120_000) {
+      recordFailure(exchange, message, true);
       return { tickers: cached.tickers };
     }
-    return { error: error instanceof Error ? error.message : String(error) };
+    recordFailure(exchange, message, false);
+    return { error: message };
   }
 }
 
@@ -205,4 +214,13 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
     tickerCount: tickers.length,
     opportunities,
   };
+}
+
+/**
+ * Alle Quellen anstoßen, damit das Feed-Health-Board auch ohne laufenden Scan
+ * aktuelle Werte hat. Nutzt denselben 15s-Cache wie `scan`, ist also günstig,
+ * und aktualisiert den Health-Zustand als Seiteneffekt von `getTickers`.
+ */
+export async function probeSources(exchanges: ExchangeId[] = ALL_EXCHANGES): Promise<void> {
+  await Promise.all(exchanges.map((ex) => getTickers(ex)));
 }
