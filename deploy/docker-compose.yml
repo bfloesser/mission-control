@@ -29,6 +29,11 @@ services:
     # Liefert MC_BASIC_AUTH_HASH an das Caddyfile. Die Datei liegt bewusst in data/,
     # weil update.ps1 auf der NAS alles ausser data/ loescht. Fehlt sie, startet
     # Caddy nicht — besser als ein Proxy ohne funktionierendes Passwort.
+    #
+    # ACHTUNG: Compose interpretiert $ in dieser Datei als Variablenreferenz.
+    # Die drei $ eines bcrypt-Hashes muessen darin verdoppelt sein ($$), sonst
+    # kommt der Hash gekuerzt an und jedes Passwort wird abgelehnt.
+    # Nicht von Hand pflegen — dafuer gibt es ./set-password.sh.
     env_file:
       - ./data/caddy.env
     ports:

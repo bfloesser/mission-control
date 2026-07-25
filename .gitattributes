@@ -1,0 +1,8 @@
+# Shell-Skripte laufen auf der NAS (Linux). Mit CRLF scheitern sie dort mit
+# "\r: command not found" -- deshalb hier hart auf LF festgenagelt, unabhaengig
+# von core.autocrlf auf dem jeweiligen Rechner.
+*.sh text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+deploy/Caddyfile text eol=lf
+*.yml text eol=lf

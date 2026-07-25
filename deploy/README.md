@@ -18,20 +18,39 @@ Der Passwort-Hash steht **nicht im Repo**. Das `Caddyfile` liest ihn über
 `{env.MC_BASIC_AUTH_HASH}` aus `data/caddy.env` auf der NAS. `data/` ist das einzige
 Verzeichnis, das `update.ps1` beim Deployen stehen lässt — die Datei überlebt jedes Update.
 
-Hash erzeugen und Datei anlegen (einmalig, direkt auf der NAS):
+Passwort setzen oder ändern — auf der NAS, im Deploy-Verzeichnis:
 
 ```sh
-# 1. bcrypt-Hash für das Wunschpasswort erzeugen
-sudo /usr/local/bin/docker run --rm caddy:2 caddy hash-password --plaintext 'DEIN_PASSWORT'
-
-# 2. Ergebnis eintragen
-mkdir -p /volume1/docker/mission-control/data
-echo 'MC_BASIC_AUTH_HASH=<hier den Hash aus Schritt 1>' > /volume1/docker/mission-control/data/caddy.env
-chmod 600 /volume1/docker/mission-control/data/caddy.env
+cd /volume1/docker/mission-control/deploy
+./set-password.sh
 ```
 
-> Fehlt `data/caddy.env`, startet der Proxy-Container **nicht**. Das ist Absicht —
-> ein laufender Proxy ohne funktionierendes Passwort wäre schlimmer als ein Ausfall.
+Das Skript fragt das Passwort verdeckt ab, erzeugt den bcrypt-Hash, schreibt
+`data/caddy.env`, erzeugt den Proxy-Container neu und prüft anschließend nach,
+dass der Hash unverstümmelt im Container angekommen ist.
+
+> ### ⚠️ Trag den Hash niemals von Hand in `caddy.env` ein
+>
+> bcrypt-Hashes enthalten drei `$`-Zeichen. **Docker Compose interpretiert `$` in
+> einer `env_file` als Variablenreferenz** und ersetzt sie durch Leerstrings. Aus
+> `$2a$14$XtuwB…` wird im Container `$2a$14…` — sechs Zeichen kürzer. Der Proxy
+> lehnt dann *jedes* Passwort ab.
+>
+> Das Symptom ist ein endlos wiederkehrender Login-Dialog ohne Fehlermeldung, und
+> `caddy.env` sieht auf der Platte völlig korrekt aus. Diese Kombination hat
+> schon einmal Stunden gekostet.
+>
+> Deshalb muss jedes `$` im Hash verdoppelt werden (`$$`) — Compose löst das beim
+> Start wieder auf. `set-password.sh` erledigt das und verifiziert das Ergebnis.
+> Wenn du es doch von Hand machst, kontrollier danach:
+>
+> ```sh
+> # muss dieselbe Länge liefern wie der erzeugte Hash (60)
+> sudo /usr/local/bin/docker exec mission-control-proxy printenv MC_BASIC_AUTH_HASH | tr -d '\n' | wc -c
+> ```
+
+Fehlt `data/caddy.env` ganz, startet der Proxy-Container **nicht**. Das ist Absicht —
+ein laufender Proxy ohne funktionierendes Passwort wäre schlimmer als ein Ausfall.
 
 ## Update ausführen
 In PowerShell in diesem Ordner:
