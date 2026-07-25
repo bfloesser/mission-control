@@ -1,0 +1,20 @@
+{
+	admin off
+	# HTTPS-Automatik behalten (interne CA), aber keinen Port-80-Redirect-Listener starten
+	# (Port 80 gehört auf der NAS dem DSM-nginx)
+	auto_https disable_redirects
+	# Bei Zugriff über IP senden Clients keinen SNI -> dieses Zertifikat als Default ausliefern
+	default_sni 192.168.178.159
+}
+
+# Login-geschützter HTTPS-Reverse-Proxy vor Mission Control (LAN, self-signed via Caddy-CA)
+https://192.168.178.159:4000 {
+	bind 0.0.0.0
+	tls internal
+	# Passwort-Hash kommt aus der Umgebung, damit er nicht im Repo landet.
+	# Quelle: ./data/caddy.env auf der NAS (siehe README.md).
+	basic_auth {
+		admin {env.MC_BASIC_AUTH_HASH}
+	}
+	reverse_proxy mission-control:4000
+}

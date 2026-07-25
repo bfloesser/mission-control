@@ -1,0 +1,8 @@
+.git
+node_modules
+.next
+data
+*.log
+mission-control.db
+mission-control.db-*
+mission-control.db.backup

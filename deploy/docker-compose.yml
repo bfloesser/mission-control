@@ -1,0 +1,43 @@
+services:
+  # Die eigentliche App — nur intern erreichbar (kein Host-Port), nur über den Proxy
+  mission-control:
+    build: .
+    image: mission-control:latest
+    container_name: mission-control
+    restart: unless-stopped
+    expose:
+      - "4000"
+    volumes:
+      # Persistente SQLite-DB + Workspace (überlebt Rebuilds)
+      - ./data:/app/data
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /app/data/mission-control.db
+      WORKSPACE_BASE_PATH: /app/data/workspace
+      PROJECTS_PATH: /app/data/workspace/projects
+      # --- Optional, nur für Orchestrierungs-Features (nicht für Arbitrage nötig) ---
+      # OPENCLAW_GATEWAY_URL: "ws://<host>:18789"
+      # OPENCLAW_GATEWAY_TOKEN: "<token>"
+
+  # Login-Proxy (Basic Auth) — bedient Port 4000 nach außen
+  caddy:
+    image: caddy:2
+    container_name: mission-control-proxy
+    restart: unless-stopped
+    depends_on:
+      - mission-control
+    # Liefert MC_BASIC_AUTH_HASH an das Caddyfile. Die Datei liegt bewusst in data/,
+    # weil update.ps1 auf der NAS alles ausser data/ loescht. Fehlt sie, startet
+    # Caddy nicht — besser als ein Proxy ohne funktionierendes Passwort.
+    env_file:
+      - ./data/caddy.env
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

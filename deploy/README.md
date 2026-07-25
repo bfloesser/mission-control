@@ -1,0 +1,60 @@
+# Mission Control — Deploy/Update auf Synology-NAS
+
+App-Repo: `github.com/bfloesser/mission-control` · läuft als Docker-Container auf der DS1221+ unter **http://192.168.178.159:4000**
+
+## Dateien
+| Datei | Zweck |
+|---|---|
+| `Dockerfile` | Baut das Next.js-Image (Node 20, SQLite). |
+| `docker-compose.yml` | Container-Definition (Port 4000, `data/`-Volume, restart-Policy). |
+| `Caddyfile` | Login-Proxy (Basic Auth, interne TLS-CA). Passwort-Hash kommt aus der Umgebung. |
+| `caddy-root-ca.crt` | Root-Zertifikat der internen Caddy-CA, zum Import im Browser/OS. |
+| `.dockerignore` | Hält `.git`/`node_modules`/`.next`/`data` aus dem Image. |
+| `update.ps1` | Ein-Kommando-Update: klont Branch → packt → überträgt → rebuild. |
+
+## Einmalig einrichten: Basic-Auth-Passwort
+
+Der Passwort-Hash steht **nicht im Repo**. Das `Caddyfile` liest ihn über
+`{env.MC_BASIC_AUTH_HASH}` aus `data/caddy.env` auf der NAS. `data/` ist das einzige
+Verzeichnis, das `update.ps1` beim Deployen stehen lässt — die Datei überlebt jedes Update.
+
+Hash erzeugen und Datei anlegen (einmalig, direkt auf der NAS):
+
+```sh
+# 1. bcrypt-Hash für das Wunschpasswort erzeugen
+sudo /usr/local/bin/docker run --rm caddy:2 caddy hash-password --plaintext 'DEIN_PASSWORT'
+
+# 2. Ergebnis eintragen
+mkdir -p /volume1/docker/mission-control/data
+echo 'MC_BASIC_AUTH_HASH=<hier den Hash aus Schritt 1>' > /volume1/docker/mission-control/data/caddy.env
+chmod 600 /volume1/docker/mission-control/data/caddy.env
+```
+
+> Fehlt `data/caddy.env`, startet der Proxy-Container **nicht**. Das ist Absicht —
+> ein laufender Proxy ohne funktionierendes Passwort wäre schlimmer als ein Ausfall.
+
+## Update ausführen
+In PowerShell in diesem Ordner:
+
+```powershell
+.\update.ps1                    # Standard: Arbitrage-Branch neu deployen
+.\update.ps1 -Branch main       # anderen Branch deployen
+.\update.ps1 -NoRebuild         # nur Code tauschen, ohne Image-Rebuild
+```
+
+Der Ordner **`/volume1/docker/mission-control/data`** auf der NAS (SQLite-DB + Workspace)
+bleibt bei jedem Update erhalten.
+
+## Voraussetzungen
+- SSH-Key `%USERPROFILE%\.ssh\id_ed25519_nas` (passwortlos, bereits eingerichtet)
+- `git`, `tar`, `ssh`, `scp` im PATH (unter Windows 10/11 alle vorhanden)
+- Passwortloses `sudo` für `c4rTman` auf der NAS (eingerichtet)
+- `data/caddy.env` auf der NAS mit `MC_BASIC_AUTH_HASH` (siehe oben) — sonst startet der Proxy nicht
+
+## Manuell auf der NAS (falls nötig)
+```sh
+cd /volume1/docker/mission-control
+sudo /usr/local/bin/docker compose up -d --build   # neu bauen & starten
+sudo /usr/local/bin/docker logs -f mission-control # Logs
+sudo /usr/local/bin/docker compose down            # stoppen
+```
