@@ -5,12 +5,32 @@
 	auto_https disable_redirects
 	# Bei Zugriff über IP senden Clients keinen SNI -> dieses Zertifikat als Default ausliefern
 	default_sni 192.168.178.159
+
+	# Das Intermediate der lokalen CA läuft per Default nur 7 Tage. Es muss
+	# deutlich länger gültig sein als das Blatt-Zertifikat unten, sonst bricht
+	# die Kette, bevor das Blatt abläuft. 90 Tage gegen 30.
+	pki {
+		ca local {
+			intermediate_lifetime 2160h
+		}
+	}
 }
 
 # Login-geschützter HTTPS-Reverse-Proxy vor Mission Control (LAN, self-signed via Caddy-CA)
 https://192.168.178.159:4000 {
 	bind 0.0.0.0
-	tls internal
+	# 'tls internal' stellt per Default nur 12 Stunden gültige Zertifikate aus.
+	# Steht die NAS länger still, läuft das Zertifikat vollständig ab -- und dann
+	# löscht Caddys Aufräumroutine beim Start den Schlüssel weg, während die
+	# Erneuerung ihn noch lesen will. Ergebnis ist eine Endlosschleife, die sich
+	# nur von Hand auflösen lässt (passiert am 2026-07-05, 20 Tage unbemerkt).
+	# 30 Tage machen aus "ein Wochenende offline" ein unkritisches Ereignis.
+	tls {
+		issuer internal {
+			ca local
+			lifetime 720h
+		}
+	}
 	# Passwort-Hash kommt aus der Umgebung, damit er nicht im Repo landet.
 	# Quelle: ./data/caddy.env auf der NAS (siehe README.md).
 	basic_auth {
