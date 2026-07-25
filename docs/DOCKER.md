@@ -3,58 +3,68 @@
 Suitable for NAS boxes (Synology Container Manager), home servers, or any
 Docker host.
 
+All deployment files live in [`deploy/`](../deploy/) — that directory is the
+single source of truth. There is deliberately **no** `docker-compose.yml` at
+the repository root: an earlier variant lived there, exposed port 4000 without
+any authentication, and was silently overwritten on every deploy.
+
 ## First start
 
 ```bash
-git clone -b claude/multi-exchange-arbitrage-RtvFj https://github.com/bfloesser/mission-control.git
-cd mission-control
+git clone https://github.com/bfloesser/mission-control.git
+cd mission-control/deploy
+# see deploy/README.md — create data/caddy.env with MC_BASIC_AUTH_HASH first
 docker compose up -d --build
 ```
 
-The dashboard listens on port **4000** (plain HTTP). SQLite database and the
-arbitrage credential encryption key are stored in `./data` on the host, so
-they survive container rebuilds.
+The stack is two containers: the Next.js app (internal only) behind a Caddy
+reverse proxy that terminates TLS with an internal CA and enforces HTTP Basic
+Auth. The dashboard is reachable on port **4000 over HTTPS**.
 
-## Updating to the latest version
+SQLite database, the arbitrage credential encryption key and `caddy.env` are
+stored in `./data` on the host, so they survive container rebuilds.
 
-```bash
-cd mission-control
-git pull
-docker compose up -d --build
-```
+> Without `data/caddy.env` the proxy refuses to start. That is intentional —
+> a running proxy without a working password would be worse than an outage.
 
-That's it — Compose rebuilds the image from the current checkout and swaps
-the container; the `./data` volume (DB, API keys) is untouched.
+## Updating
 
-## Synology: update in one command (no git needed)
-
-Git is usually missing on Synology and `sudo` may not find `docker` on its
-PATH, so use the branch tarball and full binary paths. From any machine with
-SSH access (PowerShell: keep the single quotes):
+From a machine with SSH access to the host, run the one-command update:
 
 ```powershell
-ssh USER@NAS-IP 'cd /volume1/docker 2>/dev/null || cd ~; mkdir -p mission-control && cd mission-control && (wget -qO mc.tar.gz https://github.com/bfloesser/mission-control/archive/refs/heads/claude/multi-exchange-arbitrage-RtvFj.tar.gz || curl -sL -o mc.tar.gz https://github.com/bfloesser/mission-control/archive/refs/heads/claude/multi-exchange-arbitrage-RtvFj.tar.gz) && tar --strip-components=1 -xzf mc.tar.gz && rm mc.tar.gz && mkdir -p data && (sudo /usr/local/bin/docker compose up -d --build 2>/dev/null || sudo /usr/local/bin/docker-compose up -d --build)'
+cd deploy
+.\update.ps1                    # deploys main
+.\update.ps1 -Branch <name>     # deploys another branch
+.\update.ps1 -NoRebuild         # swap code only, no image rebuild
 ```
 
-Re-running this downloads the latest branch state, rebuilds the image and
-swaps the container; the `data/` directory (DB + API keys) is preserved.
+It clones the branch fresh, overlays the files from `deploy/`, transfers the
+tarball and rebuilds the container. Everything under `data/` is preserved.
+
+Alternatively, in-place on the host:
+
+```bash
+cd mission-control && git pull
+cd deploy && docker compose up -d --build
+```
 
 ## Synology notes
 
-- Run commands via SSH with `sudo` (`sudo docker compose up -d --build`).
+- Run commands via SSH with `sudo` and the full binary path:
+  `sudo /usr/local/bin/docker compose up -d --build`.
   On older DSM versions the command is `docker-compose` (with a dash).
-- If another service already uses port 4000, change the left side of the
-  port mapping in `docker-compose.yml` (e.g. `'4400:4000'`).
-- To expose the dashboard via HTTPS, add a reverse-proxy rule in
-  DSM → Login Portal → Advanced → Reverse Proxy pointing to
-  `http://localhost:4000`.
+- Port 4000 must be free — DSM's own nginx owns port 80, which is why the
+  Caddyfile disables the HTTP→HTTPS redirect listener.
+- The internal CA certificate is `deploy/caddy-root-ca.crt`; import it into
+  your browser or OS to avoid certificate warnings.
 
 ## Configuration
 
-Environment variables (set in `docker-compose.yml`):
+Environment variables (set in `deploy/docker-compose.yml`):
 
-| Variable             | Purpose                                                        |
-| -------------------- | -------------------------------------------------------------- |
-| `DATABASE_PATH`      | SQLite location, defaults to `/data/mission-control.db`        |
-| `MC_API_TOKEN`       | Bearer token required for external API calls (recommended)     |
-| `ARB_ENCRYPTION_KEY` | Fixed 64-hex-char key for credential encryption (optional; otherwise auto-generated at `/data/.arb-secret`) |
+| Variable              | Purpose                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `DATABASE_PATH`       | SQLite location, defaults to `/app/data/mission-control.db`                                                  |
+| `MC_BASIC_AUTH_HASH`  | bcrypt hash for the Caddy Basic Auth login. Read from `data/caddy.env`, never committed                      |
+| `MC_API_TOKEN`        | Bearer token required for external API calls (recommended)                                                   |
+| `ARB_ENCRYPTION_KEY`  | Fixed 64-hex-char key for credential encryption (optional; otherwise auto-generated at `/app/data/.arb-secret`) |

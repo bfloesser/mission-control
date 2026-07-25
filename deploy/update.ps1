@@ -7,13 +7,13 @@
   überträgt alles per SSH auf die NAS und baut den Container neu.
   Der Ordner ./data auf der NAS (SQLite-DB + Workspace) bleibt dabei erhalten.
 .EXAMPLE
-  .\update.ps1
-  .\update.ps1 -Branch main
-  .\update.ps1 -NoRebuild        # nur Code aktualisieren, Container ohne Rebuild neu starten
+  .\update.ps1                    # Standard: main deployen
+  .\update.ps1 -Branch <name>     # anderen Branch deployen
+  .\update.ps1 -NoRebuild         # nur Code aktualisieren, Container ohne Rebuild neu starten
 #>
 [CmdletBinding()]
 param(
-  [string]$Branch    = "claude/multi-exchange-arbitrage-RtvFj",
+  [string]$Branch    = "main",
   [string]$NasUser   = "c4rTman",
   [string]$NasHost   = "192.168.178.159",
   [string]$RemoteDir = "/volume1/docker/mission-control",
@@ -61,10 +61,19 @@ Assert-Ok "remote rebuild"
 
 Write-Host "==> Funktionstest" -ForegroundColor Cyan
 Start-Sleep -Seconds 6
+# Caddy serviert HTTPS mit Basic Auth und interner CA -> Zertifikatspruefung aus.
+# Ein 401 ist hier das ERWUENSCHTE Ergebnis: Proxy laeuft und der Passwortschutz greift.
 try {
-  $r = Invoke-WebRequest "http://${NasHost}:4000/arbitrage" -UseBasicParsing -TimeoutSec 25
-  Write-Host ("    /arbitrage  -> HTTP {0}" -f $r.StatusCode) -ForegroundColor Green
-} catch { Write-Warning "/arbitrage nicht erreichbar: $($_.Exception.Message)" }
+  $r = Invoke-WebRequest "https://${NasHost}:4000/arbitrage" -UseBasicParsing -TimeoutSec 25 -SkipCertificateCheck
+  Write-Host ("    /arbitrage  -> HTTP {0} (unerwartet: kein Passwortschutz!)" -f $r.StatusCode) -ForegroundColor Yellow
+} catch {
+  $code = $_.Exception.Response.StatusCode.value__
+  if ($code -eq 401) {
+    Write-Host "    /arbitrage  -> HTTP 401, Basic Auth aktiv" -ForegroundColor Green
+  } else {
+    Write-Warning "/arbitrage nicht erreichbar: $($_.Exception.Message)"
+  }
+}
 
 Write-Host ""
-Write-Host "Fertig ($commit). App: http://${NasHost}:4000/arbitrage" -ForegroundColor Green
+Write-Host "Fertig ($commit). App: https://${NasHost}:4000/arbitrage" -ForegroundColor Green
